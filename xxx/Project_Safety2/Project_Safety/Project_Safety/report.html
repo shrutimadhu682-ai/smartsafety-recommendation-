@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#030b0e">
+    <meta name="description" content="ZENSAFE Incident Reporting – Anonymously report unsafe areas, harassment, theft, and poor lighting.">
+    <title>ZENSAFE | Report Incident</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<button class="theme-toggle" title="Toggle Theme">☀️</button>
+
+<div id="offline-banner">⚠️ OFFLINE – Report saved locally, will sync when connected.</div>
+
+<div class="app-container" style="padding-bottom:90px;">
+
+    <!-- LEFT: Report Form -->
+    <div class="panel" style="display:flex;flex-direction:column;gap:16px;">
+        <div>
+            <h2 style="margin:0;display:flex;align-items:center;gap:10px;">
+                <i class="fa-solid fa-bullhorn" style="color:var(--accent-primary);font-size:1rem;"></i>
+                Report Incident
+            </h2>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">Anonymous — your identity is never stored or shared.</p>
+        </div>
+
+        <!-- Incident Type -->
+        <div class="glass-panel">
+            <h4 style="margin-bottom:12px;font-size:0.88rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Incident Type</h4>
+            <div class="pill-group">
+                <div class="pill-btn" id="pill-harassment" onclick="selectPill(this, 'Harassment')">⚠️ Harassment</div>
+                <div class="pill-btn active" id="pill-suspicious" onclick="selectPill(this, 'Suspicious Activity')">👁️ Suspicious Activity</div>
+                <div class="pill-btn" id="pill-lighting" onclick="selectPill(this, 'Poor Lighting')">💡 Poor Lighting</div>
+                <div class="pill-btn" id="pill-theft" onclick="selectPill(this, 'Theft')">🔓 Theft</div>
+                <div class="pill-btn" id="pill-other" onclick="selectPill(this, 'Other')">📌 Other</div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="glass-panel">
+            <h4 style="margin-bottom:10px;font-size:0.88rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Description</h4>
+            <textarea id="report-desc" class="map-input" rows="4"
+                style="width:100%;resize:none;background:rgba(0,0,0,0.4);"
+                placeholder="Describe what happened... (optional, anonymous)"></textarea>
+
+            <!-- Time -->
+            <div style="margin-top:12px;">
+                <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Time of Incident</label>
+                <input type="time" id="report-time" class="map-input" style="width:100%;" value="">
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="glass-panel" style="display:flex;align-items:flex-start;gap:10px;background:rgba(0,229,176,0.04);border-color:rgba(0,229,176,0.2);">
+            <i class="fa-solid fa-hand-pointer" style="color:var(--accent-primary);margin-top:2px;"></i>
+            <div>
+                <div style="font-size:0.88rem;font-weight:600;margin-bottom:4px;">Tap map to drop a pin</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);">Click anywhere on the map to mark the incident location. A confirmation popup will appear.</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <button id="submit-report-btn" class="primary-btn" onclick="showPinInstruction()">
+            <i class="fa-solid fa-map-pin"></i> Drop a Pin on Map
+        </button>
+
+        <button class="secondary-btn" style="font-size:0.82rem;color:var(--danger-color);border-color:rgba(255,61,90,0.2);"
+            onclick="clearAllReports()">
+            <i class="fa-solid fa-trash"></i> Clear All Reports
+        </button>
+
+        <!-- My Reports -->
+        <div class="glass-panel">
+            <div class="flex-between" style="margin-bottom:8px;">
+                <h4 style="margin:0;font-size:0.88rem;">Recent Reports</h4>
+                <span class="badge badge-safety" id="reports-count">0 reports</span>
+            </div>
+            <div id="recent-reports-list" style="max-height:200px;overflow-y:auto;">
+                <p style="color:var(--text-muted);font-size:0.82rem;">No reports submitted yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Map -->
+    <div class="panel" style="display:flex;flex-direction:column;">
+        <div class="flex-between mb-2">
+            <div>
+                <h2 style="margin:0;font-size:1.1rem;">Community Safety Map</h2>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-top:2px;">Crowdsourced reports + AI risk heatmap</p>
+            </div>
+            <div class="badge badge-safety">Dehradun, India</div>
+        </div>
+
+        <div class="map-wrapper" style="flex:1;cursor:crosshair;border:1px solid rgba(255,61,90,0.2);">
+            <div id="report-map" style="min-height:500px;"></div>
+            <div class="loader-overlay" id="map-loader" style="border-radius:16px;"><div class="spinner"></div></div>
+        </div>
+
+        <!-- Legend -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+                <span style="font-size:1rem;">⚠️</span> Harassment
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+                <span style="font-size:1rem;">🔓</span> Theft
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+                <span style="font-size:1rem;">💡</span> Poor Lighting
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+                <span style="font-size:1rem;">👁️</span> Suspicious
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+                <span style="font-size:1rem;">📌</span> Other
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+    <a href="index.html" class="nav-item"><i class="fa-solid fa-house"></i> Dashboard</a>
+    <a href="guardian.html" class="nav-item"><i class="fa-solid fa-satellite-dish"></i> Guardian</a>
+    <a href="sos.html" class="nav-item sos-nav"><i class="fa-solid fa-shield-heart"></i></a>
+    <a href="report.html" class="nav-item active"><i class="fa-solid fa-map-pin"></i> Report</a>
+    <a href="contacts.html" class="nav-item"><i class="fa-solid fa-users"></i> Contacts</a>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="script.js"></script>
+<script>
+function selectPill(el, type) {
+    document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+}
+function showPinInstruction() {
+    const t=document.createElement('div');
+    t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,229,176,0.95);color:#030b0e;padding:11px 22px;border-radius:11px;font-weight:700;z-index:9999;font-size:0.86rem;';
+    t.textContent='🗺️ Tap the map to drop a pin';
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(),2500);
+}
+async function clearAllReports() {
+    if (!confirm('Clear ALL reports? Cannot be undone.')) return;
+    await fetch('/api/reports/all',{method:'DELETE'}).catch(()=>{});
+    localStorage.removeItem('incidentReports');
+    location.reload();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#030b0e">
+    <meta name="description" content="ZENSAFE Emergency Mode – One-tap SOS, fake call generator, voice activation, and evidence recording.">
+    <title>ZENSAFE | Emergency SOS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<button class="theme-toggle" title="Toggle Theme">☀️</button>
+
+<div id="offline-banner">⚠️ OFFLINE – Last location saved. Guardians notified.</div>
+
+<!-- SOS Countdown Modal -->
+<div class="overlay" id="sos-modal">
+    <div class="modal-card" style="border-color:rgba(255,61,90,0.4);text-align:center;">
+        <div id="sos-countdown-view">
+            <div class="badge badge-risk mb-2" style="margin:0 auto;">
+                <i class="fa-solid fa-circle-exclamation"></i> SOS ACTIVATING
+            </div>
+            <div class="sos-countdown" id="countdown-num">3</div>
+            <p style="color:var(--text-muted);margin:12px 0 24px;font-size:0.9rem;">Sending emergency alert with your GPS coordinates...</p>
+            <button onclick="cancelSOS()" class="secondary-btn" style="max-width:200px;margin:0 auto;">
+                <i class="fa-solid fa-xmark"></i> Cancel
+            </button>
+        </div>
+        <div id="sos-sent-view" style="display:none;">
+            <div style="font-size:3rem;margin-bottom:16px;">📡</div>
+            <h2 style="color:var(--danger-color);">Emergency Alert Sent!</h2>
+            <div class="glass-panel" style="text-align:left;margin:20px 0;">
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">SMS Preview</div>
+                <pre id="sos-sms-preview" style="font-size:0.82rem;color:var(--text-main);white-space:pre-wrap;line-height:1.6;"></pre>
+            </div>
+            <button onclick="closeSOS()" class="primary-btn" style="margin-top:4px;">
+                <i class="fa-solid fa-check"></i> Acknowledged
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Fake Call -->
+<div class="fake-call-overlay" id="fake-call-overlay">
+    <h2 style="font-weight:300;color:#888;margin-bottom:8px;">Incoming Call...</h2>
+    <div class="caller-avatar"><i class="fa-solid fa-user-nurse"></i></div>
+    <h1 style="font-size:1.8rem;margin:0;">Emergency Contact</h1>
+    <p style="color:#666;margin-top:6px;">Safety Guard • +91-XXXXXXXXXX</p>
+    <div class="call-btn-group">
+        <button class="btn-reject" onclick="hideFakeCall()"><i class="fa-solid fa-phone" style="transform:rotate(135deg);"></i></button>
+        <button class="btn-accept" onclick="hideFakeCall()"><i class="fa-solid fa-phone"></i></button>
+    </div>
+</div>
+
+<div style="display:flex;justify-content:center;align-items:flex-start;padding:20px 20px 100px;gap:20px;flex-wrap:wrap;">
+
+    <!-- SOS MAIN PANEL -->
+    <div class="glass-panel" style="max-width:520px;width:100%;border:1px solid rgba(255,61,90,0.3);padding:28px;">
+        <div class="flex-between mb-2">
+            <h2 class="danger-color" style="margin:0;font-size:1.4rem;">
+                <i class="fa-solid fa-circle-exclamation"></i> EMERGENCY
+            </h2>
+            <div class="badge badge-risk" id="sos-status-badge">STANDBY</div>
+        </div>
+
+        <!-- SOS Button -->
+        <div class="sos-container">
+            <button id="sos-btn" class="sos-btn" onclick="startSOSCountdown()">SOS</button>
+            <p style="color:#fff;letter-spacing:2px;font-weight:700;text-transform:uppercase;margin-top:20px;font-size:0.88rem;">Tap to Trigger Emergency</p>
+            <p id="sos-status" style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">System standing by.</p>
+        </div>
+
+        <!-- Voice SOS Toggle -->
+        <div class="glass-panel" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;cursor:pointer;" onclick="toggleVoiceSOS()">
+            <div class="mic-indicator idle" id="sos-mic" style="pointer-events:none;">
+                <div class="mic-dot"></div>
+                <i class="fa-solid fa-microphone"></i>
+                <span id="mic-label">Voice SOS Off</span>
+            </div>
+            <div style="flex:1;">
+                <div style="font-size:0.9rem;font-weight:600;">Voice Activation</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);">Say "help me" or "SOS" to trigger</div>
+            </div>
+            <label class="toggle-switch" onclick="event.stopPropagation();">
+                <input type="checkbox" id="voice-toggle" onchange="voiceToggleChanged(this)">
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="scores-grid" style="margin-bottom:16px;">
+            <button class="secondary-btn" id="fake-call-btn-sos" style="flex-direction:column;gap:8px;padding:14px 8px;" onclick="showFakeCall()">
+                <i class="fa-solid fa-phone-volume" style="font-size:1.5rem;color:var(--safe-color);"></i>
+                <span>Fake Call</span>
+            </button>
+            <button class="secondary-btn" id="rec-evidence-btn" style="flex-direction:column;gap:8px;padding:14px 8px;">
+                <i class="fa-solid fa-video" style="font-size:1.5rem;color:var(--blue-color);"></i>
+                <span>Record</span>
+            </button>
+        </div>
+
+        <!-- Camera Preview -->
+        <div id="camera-wrap">
+            <video id="camera-preview" autoplay muted playsinline></video>
+            <div class="recording-indicator" id="rec-indicator">
+                <div class="recording-pulse"></div> RECORDING LIVE
+            </div>
+        </div>
+
+        <!-- Helplines -->
+        <div style="margin-top:16px;">
+            <h4 style="font-size:0.78rem;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:10px;">Quick Dial Helplines</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <a href="tel:100" class="badge badge-risk" style="text-decoration:none;padding:8px 14px;">Police 100</a>
+                <a href="tel:102" class="badge badge-safety" style="text-decoration:none;padding:8px 14px;">Amb. 102</a>
+                <a href="tel:1091" class="badge badge-warn" style="text-decoration:none;padding:8px 14px;">Women 1091</a>
+                <a href="tel:112" class="badge badge-live" style="text-decoration:none;padding:8px 14px;">112 SOS</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ALERT LOG PANEL -->
+    <div class="panel" style="max-width:380px;width:100%;display:flex;flex-direction:column;gap:12px;">
+        <div class="flex-between">
+            <h3 style="margin:0;"><i class="fa-solid fa-bell" style="color:var(--accent-primary);"></i> Alert History</h3>
+            <button class="secondary-btn" style="width:auto;padding:6px 12px;font-size:0.75rem;"
+                onclick="localStorage.removeItem('alertLog'); location.reload();">Clear</button>
+        </div>
+        <ul class="alert-log" id="mini-alert-list" style="flex:1;max-height:350px;">
+            <li class="alert-item"><span style="color:var(--text-muted);">No alerts yet.</span></li>
+        </ul>
+
+        <!-- GPS Coordinates -->
+        <div class="glass-panel">
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Last Known Location</div>
+            <div id="coords-display" style="font-size:0.88rem;font-weight:600;color:var(--text-main);">Acquiring GPS...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Screen Flash -->
+<div class="screen-flash" id="screen-flash"></div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+    <a href="index.html" class="nav-item"><i class="fa-solid fa-house"></i> Dashboard</a>
+    <a href="guardian.html" class="nav-item"><i class="fa-solid fa-satellite-dish"></i> Guardian</a>
+    <a href="sos.html" class="nav-item sos-nav active"><i class="fa-solid fa-shield-heart"></i></a>
+    <a href="report.html" class="nav-item"><i class="fa-solid fa-map-pin"></i> Report</a>
+    <a href="contacts.html" class="nav-item"><i class="fa-solid fa-users"></i> Contacts</a>
+</nav>
+
+<script src="script.js"></script>
+<script>
+function voiceToggleChanged(checkbox) {
+    if (checkbox.checked) startVoice();
+    else stopVoice();
+}
+</script>
+</body>
+</html>

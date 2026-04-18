@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="ZENSAFE – AI-powered smart safety navigation with real-time fear scores, safest routes, SOS, and guardian tracking.">
+    <meta name="theme-color" content="#030b0e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>ZENSAFE | AI Safety Navigation</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* ── Autocomplete Dropdown ─────────────────────── */
+        .zs-autocomplete-wrap { position: relative; flex: 1; }
+        .zs-autocomplete-list {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0; right: 0;
+            background: #0d1f26;
+            border: 1px solid rgba(0,229,176,0.25);
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            z-index: 99999;
+            overflow: hidden;
+            display: none;
+        }
+        .zs-autocomplete-list.open { display: block; }
+        .zs-ac-item {
+            padding: 9px 14px;
+            font-size: 0.84rem;
+            color: #a0b8c0;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background .15s;
+        }
+        .zs-ac-item:last-child { border-bottom: none; }
+        .zs-ac-item:hover, .zs-ac-item.active { background: rgba(0,229,176,0.1); color: #fff; }
+        .zs-ac-item i { color: var(--accent-primary); font-size: 0.75rem; flex-shrink: 0; }
+        .zs-ac-loading { padding: 10px 14px; font-size: 0.82rem; color: var(--text-muted); text-align: center; }
+
+        /* ── Route info bar ────────────────────────────── */
+        #route-info-bar {
+            display: none;
+            flex-direction: row;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 9px 12px;
+            background: rgba(0,229,176,0.06);
+            border: 1px solid rgba(0,229,176,0.2);
+            border-radius: 10px;
+            margin-top: 8px;
+            font-size: 0.82rem;
+        }
+        .route-info-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            color: var(--text-main);
+        }
+        .route-info-chip i { color: var(--accent-primary); font-size: 0.75rem; }
+        .route-info-chip.warn i  { color: var(--warn-color);   }
+        .route-info-chip.danger i{ color: var(--danger-color); }
+
+        /* Leaflet dark popup */
+        .leaflet-popup-content-wrapper {
+            background: #0d1f26;
+            color: #e2eef2;
+            border: 1px solid rgba(0,229,176,0.2);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        .leaflet-popup-tip { background: #0d1f26; }
+        .leaflet-popup-close-button { color: #a0b8c0 !important; }
+
+        /* input icons */
+        .map-input-wrap { position: relative; flex: 1; }
+        .map-input-wrap .input-icon {
+            position: absolute; left: 11px; top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.75rem; pointer-events: none; z-index: 1;
+        }
+        .map-input-wrap input { padding-left: 32px !important; }
+    </style>
+</head>
+<body>
+
+<!-- Theme Toggle -->
+<button class="theme-toggle" id="theme-btn" title="Toggle Light/Dark Mode">☀️</button>
+
+<!-- Offline Banner -->
+<div id="offline-banner">⚠️ OFFLINE – Last location saved. Guardians notified.</div>
+
+<!-- Screen Flash (Voice SOS) -->
+<div class="screen-flash" id="screen-flash"></div>
+
+<!-- ===== DECOY CALCULATOR ===== -->
+<div id="decoy-overlay">
+    <div style="position:relative;">
+        <div class="calc-secret-hint">type 1234= to exit</div>
+        <div class="calc-display">
+            <div class="calc-expression" id="calc-expr"></div>
+            <div class="calc-result" id="calc-result">0</div>
+        </div>
+        <div class="calc-grid">
+            <button class="calc-btn action" data-val="AC">AC</button>
+            <button class="calc-btn action" data-val="+/-">+/-</button>
+            <button class="calc-btn action" data-val="%">%</button>
+            <button class="calc-btn op"     data-val="÷">÷</button>
+            <button class="calc-btn"        data-val="7">7</button>
+            <button class="calc-btn"        data-val="8">8</button>
+            <button class="calc-btn"        data-val="9">9</button>
+            <button class="calc-btn op"     data-val="×">×</button>
+            <button class="calc-btn"        data-val="4">4</button>
+            <button class="calc-btn"        data-val="5">5</button>
+            <button class="calc-btn"        data-val="6">6</button>
+            <button class="calc-btn op"     data-val="−">−</button>
+            <button class="calc-btn"        data-val="1">1</button>
+            <button class="calc-btn"        data-val="2">2</button>
+            <button class="calc-btn"        data-val="3">3</button>
+            <button class="calc-btn op"     data-val="+">+</button>
+            <button class="calc-btn zero"   data-val="0">0</button>
+            <button class="calc-btn"        data-val=".">.</button>
+            <button class="calc-btn equal"  data-val="=">=</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== RISK ZONE ALERT ===== -->
+<div class="risk-zone-alert" id="risk-zone-alert">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger-color);"></i>
+                <strong id="alert-zone-name" style="color:var(--danger-color);">High Risk Zone</strong>
+                <span class="badge badge-risk" id="alert-risk-level">CRITICAL</span>
+            </div>
+            <p id="alert-action" style="font-size:0.84rem;color:var(--text-muted);margin:0;">Consider alternate route.</p>
+        </div>
+        <button onclick="dismissRiskAlert()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2rem;padding:0;flex-shrink:0;">✕</button>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;">
+        <button onclick="recalcSafeRoute()" style="background:rgba(0,229,176,0.12);border:1px solid rgba(0,229,176,0.3);color:var(--safe-color);padding:6px 13px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600;font-family:inherit;">
+            <i class="fa-solid fa-route"></i> Safest Route
+        </button>
+        <button onclick="dismissRiskAlert()" style="background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-muted);padding:6px 13px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-family:inherit;">Dismiss</button>
+    </div>
+</div>
+
+<!-- ===== SOS MODAL ===== -->
+<div class="overlay" id="sos-modal">
+    <div class="modal-card" style="border-color:rgba(255,61,90,0.4);text-align:center;">
+        <div id="sos-countdown-view">
+            <div class="badge badge-risk" style="margin:0 auto 12px;display:inline-flex;">
+                <i class="fa-solid fa-circle-exclamation"></i> SOS ACTIVATING
+            </div>
+            <div class="sos-countdown" id="countdown-num">3</div>
+            <p style="color:var(--text-muted);margin:12px 0 22px;font-size:0.88rem;">Sending emergency alert with your GPS location…</p>
+            <button onclick="cancelSOS()" class="secondary-btn" style="max-width:200px;margin:0 auto;">
+                <i class="fa-solid fa-xmark"></i> Cancel
+            </button>
+        </div>
+        <div id="sos-sent-view" style="display:none;">
+            <div style="font-size:2.8rem;margin-bottom:14px;">📡</div>
+            <h2 style="color:var(--danger-color);margin-bottom:8px;">Alert Sent!</h2>
+            <div class="glass-panel" style="text-align:left;margin:16px 0;">
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:0.5px;">SMS Preview</div>
+                <pre id="sos-sms-preview" style="font-size:0.82rem;color:var(--text-main);white-space:pre-wrap;line-height:1.65;"></pre>
+            </div>
+            <button onclick="closeSOS()" class="primary-btn"><i class="fa-solid fa-check"></i> Acknowledged</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== FAKE CALL OVERLAY ===== -->
+<div class="fake-call-overlay" id="fake-call-overlay">
+    <h2 style="font-weight:300;color:#aaa;margin-bottom:6px;">Incoming Call…</h2>
+    <div class="caller-avatar"><i class="fa-solid fa-user-secret"></i></div>
+    <h1 style="margin:0;font-size:1.7rem;">Emergency Contact</h1>
+    <p style="color:#666;margin-top:6px;font-size:0.9rem;">Safety Guard • Mobile</p>
+    <div class="call-btn-group">
+        <button class="btn-reject" onclick="hideFakeCall()"><i class="fa-solid fa-phone" style="transform:rotate(135deg);"></i></button>
+        <button class="btn-accept" onclick="hideFakeCall()"><i class="fa-solid fa-phone"></i></button>
+    </div>
+</div>
+
+<!-- ===== FLOATING SOS ===== -->
+<button class="floating-sos" id="floating-sos-btn" onclick="startSOSCountdown()" title="One-Tap SOS">SOS</button>
+
+<!-- ===== MAIN APP GRID ===== -->
+<div class="app-container">
+
+    <!-- LEFT: SIDEBAR -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+        <!-- Brand Panel -->
+        <div class="panel">
+            <div class="flex-between mb-2">
+                <div class="logo-header" title="Long-press 3s → Decoy Mode">
+                    <div class="logo-icon" id="logo-icon-btn">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    ZENSAFE
+                </div>
+                <div class="mic-indicator idle" id="mic-toggle" onclick="toggleVoiceSOS()" title="Voice SOS">
+                    <div class="mic-dot"></div>
+                    <i class="fa-solid fa-microphone" style="font-size:0.82rem;"></i>
+                    <span id="mic-label">Voice Off</span>
+                </div>
+            </div>
+            <h2 style="font-size:1.6rem;line-height:1.15;margin-bottom:7px;">Navigate Smart.<br><span style="color:var(--accent-primary);">Stay Zero-Fear.</span></h2>
+            <p style="font-size:0.85rem;color:var(--text-muted);">AI-powered routes, real-time risk alerts, and 24/7 guardian protection — every journey matters.</p>
+            <div class="glass-panel mt-2">
+                <div class="flex-between">
+                    <div>
+                        <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Network Status</div>
+                        <div id="network-status-text" style="font-weight:600;font-size:0.88rem;">
+                            <i class="fa-solid fa-circle" style="color:var(--safe-color);font-size:0.45rem;vertical-align:middle;margin-right:4px;"></i>Connecting…
+                        </div>
+                    </div>
+                    <span class="badge badge-live" id="main-status-badge">SECURE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fear Score -->
+        <div class="panel" style="flex:1;">
+            <div class="flex-between mb-2">
+                <h3 style="margin:0;font-size:0.95rem;"><i class="fa-solid fa-chart-pie" style="color:var(--accent-primary);"></i> Area Fear Score</h3>
+                <div class="time-toggle">
+                    <button class="time-toggle-btn active" id="day-btn"   onclick="setTimeMode('day')">☀️ Day</button>
+                    <button class="time-toggle-btn"        id="night-btn" onclick="setTimeMode('night')">🌙 Night</button>
+                </div>
+            </div>
+            <div class="score-ring-wrap" style="margin-bottom:14px;">
+                <svg width="100" height="100" viewBox="0 0 110 110">
+                    <circle class="score-ring-bg"   cx="55" cy="55" r="45"/>
+                    <circle class="score-ring-fill" id="fear-ring" cx="55" cy="55" r="45"
+                        stroke="var(--safe-color)" stroke-dasharray="283" stroke-dashoffset="283"/>
+                </svg>
+                <div class="score-ring-text" id="fear-score-num" style="color:var(--safe-color);">--</div>
+            </div>
+            <div class="text-center mb-2">
+                <div class="fear-badge low" id="fear-badge" style="display:inline-flex;">
+                    <i class="fa-solid fa-shield-check"></i> Calculating…
+                </div>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text-muted);">
+                <div class="flex-between" style="margin-bottom:5px;"><span>Crime Density</span><span id="crime-density-val" style="color:var(--text-main);font-weight:600;">--</span></div>
+                <div class="risk-bar"><div class="risk-bar-fill" id="crime-bar" style="width:0%;background:var(--safe-color);"></div></div>
+                <div class="flex-between" style="margin:7px 0 5px;"><span>Time Multiplier</span><span id="time-mult-val" style="color:var(--text-main);font-weight:600;">1.0×</span></div>
+                <div class="risk-bar"><div class="risk-bar-fill" id="time-bar" style="width:40%;background:var(--warn-color);"></div></div>
+                <div class="flex-between" style="margin:7px 0 5px;"><span>Isolation Factor</span><span id="isolation-val" style="color:var(--text-main);font-weight:600;">--</span></div>
+                <div class="risk-bar"><div class="risk-bar-fill" id="isolation-bar" style="width:0%;background:var(--blue-color);"></div></div>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="panel">
+            <h3 style="font-size:0.8rem;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Quick Stats</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div class="glass-panel" style="text-align:center;padding:10px;">
+                    <div style="font-size:1.3rem;font-weight:800;color:var(--accent-primary);" id="stat-reports">--</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px;">Reports</div>
+                </div>
+                <div class="glass-panel" style="text-align:center;padding:10px;">
+                    <div style="font-size:1.3rem;font-weight:800;color:var(--blue-color);" id="stat-guardians">--</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px;">Guardians</div>
+                </div>
+                <div class="glass-panel" style="text-align:center;padding:10px;">
+                    <div style="font-size:1.3rem;font-weight:800;color:var(--warn-color);">10</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px;">Risk Zones</div>
+                </div>
+                <div class="glass-panel" style="text-align:center;padding:10px;">
+                    <div style="font-size:1.3rem;font-weight:800;color:var(--safe-color);" id="stat-saved">--</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px;">Routes</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CENTER: MAP -->
+    <div class="panel" style="display:flex;flex-direction:column;padding:16px;">
+        <div class="flex-between mb-1">
+            <div>
+                <h2 style="margin:0;font-size:1.15rem;">
+                    <i class="fa-solid fa-map" style="color:var(--accent-primary);font-size:0.95rem;margin-right:5px;"></i>Safe Route Planner
+                </h2>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-top:1px;">Real-time GPS • OpenStreetMap • AI Hazard Detection</p>
+            </div>
+            <div class="badge badge-live" id="area-status-badge">
+                <i class="fa-solid fa-circle" style="font-size:0.45rem;"></i> LIVE
+            </div>
+        </div>
+
+        <!-- Route Inputs with Custom Autocomplete -->
+        <div class="map-input-row" style="align-items:flex-start;">
+            <div class="zs-autocomplete-wrap">
+                <div class="map-input-wrap">
+                    <i class="fa-solid fa-circle-dot input-icon" style="color:var(--safe-color);"></i>
+                    <input type="text" class="map-input" id="origin-input" placeholder="📍 Origin — city or place" autocomplete="off">
+                </div>
+                <div class="zs-autocomplete-list" id="origin-ac-list"></div>
+            </div>
+            <div class="zs-autocomplete-wrap">
+                <div class="map-input-wrap">
+                    <i class="fa-solid fa-location-pin input-icon" style="color:var(--danger-color);"></i>
+                    <input type="text" class="map-input" id="dest-input" placeholder="🎯 Destination — city or place" autocomplete="off">
+                </div>
+                <div class="zs-autocomplete-list" id="dest-ac-list"></div>
+            </div>
+            <button id="find-route-btn" class="primary-btn" style="width:auto;padding:0 18px;white-space:nowrap;height:42px;">
+                <i class="fa-solid fa-location-arrow"></i> Find Route
+            </button>
+        </div>
+
+        <!-- Route Info Bar -->
+        <div id="route-info-bar">
+            <div class="route-info-chip">
+                <i class="fa-solid fa-road"></i>
+                <span id="info-distance">-- km</span>
+            </div>
+            <div class="route-info-chip">
+                <i class="fa-solid fa-clock"></i>
+                <span id="info-duration">-- min</span>
+            </div>
+            <div class="route-info-chip warn">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span id="info-hazards">-- hazard zones</span>
+            </div>
+            <div class="route-info-chip" id="info-fear-chip">
+                <i class="fa-solid fa-gauge-high"></i>
+                <span id="info-fear">Fear Score: --</span>
+            </div>
+        </div>
+
+        <!-- Route Controls -->
+        <div class="map-controls-row">
+            <button class="route-mode-btn active-safe" id="mode-safe" onclick="setRouteMode('safe')">
+                <i class="fa-solid fa-shield-check"></i> Safest
+            </button>
+            <button class="route-mode-btn" id="mode-fast" onclick="setRouteMode('fast')">
+                <i class="fa-solid fa-bolt"></i> Fastest
+            </button>
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-muted);cursor:pointer;margin-left:auto;user-select:none;">
+                <input type="checkbox" id="heatmap-toggle" checked> Heatmap
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-muted);cursor:pointer;user-select:none;">
+                <input type="checkbox" id="zones-toggle" checked> Zones
+            </label>
+            <button onclick="centerOnUser()" style="background:rgba(0,229,176,0.1);border:1px solid rgba(0,229,176,0.25);color:var(--safe-color);padding:5px 11px;border-radius:8px;cursor:pointer;font-size:0.78rem;font-family:inherit;">
+                <i class="fa-solid fa-crosshairs"></i> My Location
+            </button>
+        </div>
+
+        <!-- Map -->
+        <div class="map-wrapper" style="flex:1;">
+            <div id="map" style="height:100%;min-height:340px;"></div>
+            <div class="loader-overlay" id="map-loader" style="border-radius:14px;"><div class="spinner"></div></div>
+            <div style="position:absolute;bottom:10px;left:10px;z-index:1000;background:rgba(3,11,14,0.82);backdrop-filter:blur(8px);border-radius:8px;padding:7px 11px;border:1px solid var(--glass-border);">
+                <div class="heatmap-legend">
+                    <div><div class="legend-swatch" style="background:rgba(0,229,176,0.8);"></div>Safe</div>
+                    <div><div class="legend-swatch" style="background:rgba(255,183,0,0.8);"></div>Moderate</div>
+                    <div><div class="legend-swatch" style="background:rgba(255,61,90,0.8);"></div>High Risk</div>
+                </div>
+            </div>
+            <div id="sim-user-info" style="position:absolute;top:8px;right:8px;z-index:1000;background:rgba(3,11,14,0.82);backdrop-filter:blur(6px);border-radius:8px;padding:6px 10px;border:1px solid var(--glass-border);font-size:0.75rem;color:var(--text-muted);display:none;">
+                <i class="fa-solid fa-satellite-dish" style="color:var(--accent-primary);"></i>
+                <span id="sim-step-label">Tracking…</span>
+            </div>
+        </div>
+
+        <!-- Route Comparison -->
+        <div class="scores-grid">
+            <div class="glass-panel" style="border-color:rgba(0,229,176,0.2);">
+                <div class="flex-between" style="margin-bottom:6px;">
+                    <h3 style="margin:0;font-size:0.9rem;color:var(--safe-color);"><i class="fa-solid fa-shield-check"></i> Safest</h3>
+                    <span class="badge badge-live" style="font-size:0.6rem;">AI Pick</span>
+                </div>
+                <p id="safe-time" style="font-size:0.82rem;color:var(--text-muted);">-- min • -- km</p>
+                <div class="score-box">
+                    <span style="color:var(--text-muted);font-size:0.8rem;">Fear</span>
+                    <div style="display:flex;align-items:center;gap:7px;">
+                        <span class="score-value safe-color" id="safe-fear-score">--</span>
+                        <div class="fear-badge low" id="safe-fear-badge" style="font-size:0.65rem;padding:3px 7px;">LOW</div>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel" style="border-color:rgba(255,61,90,0.2);">
+                <div class="flex-between" style="margin-bottom:6px;">
+                    <h3 style="margin:0;font-size:0.9rem;color:var(--danger-color);"><i class="fa-solid fa-bolt"></i> Fastest</h3>
+                    <span class="badge badge-risk" style="font-size:0.6rem;">Caution</span>
+                </div>
+                <p id="fast-time" style="font-size:0.82rem;color:var(--text-muted);">-- min • -- km</p>
+                <div class="score-box">
+                    <span style="color:var(--text-muted);font-size:0.8rem;">Fear</span>
+                    <div style="display:flex;align-items:center;gap:7px;">
+                        <span class="score-value danger-color" id="fast-fear-score">--</span>
+                        <div class="fear-badge critical" id="fast-fear-badge" style="font-size:0.65rem;padding:3px 7px;">HIGH</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: SOS + ALERTS -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+        <!-- SOS Panel -->
+        <div class="panel" style="text-align:center;border:1px solid rgba(255,61,90,0.2);">
+            <div class="flex-between mb-1">
+                <span class="badge badge-risk"><i class="fa-solid fa-circle-exclamation"></i> Emergency</span>
+                <div class="mic-indicator idle" id="mic-status-right" style="font-size:0.72rem;pointer-events:none;">
+                    <div class="mic-dot"></div>
+                    <span id="mic-status-text">Off</span>
+                </div>
+            </div>
+            <div class="sos-container">
+                <button class="sos-btn" id="main-sos-btn" onclick="startSOSCountdown()">SOS</button>
+            </div>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;">Tap to trigger emergency broadcast</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+                <button class="secondary-btn" id="fake-call-btn" onclick="showFakeCall()" style="flex-direction:column;gap:5px;padding:10px 6px;">
+                    <i class="fa-solid fa-phone-volume" style="font-size:1.2rem;color:var(--safe-color);"></i>
+                    <span style="font-size:0.75rem;">Fake Call</span>
+                </button>
+                <button class="secondary-btn" id="rec-evidence-btn" style="flex-direction:column;gap:5px;padding:10px 6px;">
+                    <i class="fa-solid fa-video" style="font-size:1.2rem;color:var(--blue-color);"></i>
+                    <span style="font-size:0.75rem;">Evidence</span>
+                </button>
+            </div>
+            <div id="camera-wrap">
+                <video id="camera-preview" autoplay muted playsinline></video>
+                <div class="recording-indicator" id="rec-indicator">
+                    <div class="recording-pulse"></div> RECORDING
+                </div>
+            </div>
+            <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+                <a href="tel:100"  class="badge badge-risk"   style="text-decoration:none;padding:6px 10px;">Police 100</a>
+                <a href="tel:102"  class="badge badge-safety" style="text-decoration:none;padding:6px 10px;">Amb. 102</a>
+                <a href="tel:1091" class="badge badge-warn"   style="text-decoration:none;padding:6px 10px;">Women 1091</a>
+            </div>
+        </div>
+
+        <!-- Alert Log -->
+        <div class="panel" style="flex:1;display:flex;flex-direction:column;">
+            <div class="flex-between" style="margin-bottom:10px;">
+                <h3 style="margin:0;font-size:0.95rem;">
+                    <i class="fa-solid fa-bell" style="color:var(--accent-primary);font-size:0.85rem;"></i> Risk Alerts
+                </h3>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <span id="alert-count" class="badge badge-risk" style="display:none;">0</span>
+                    <a href="guardian.html" style="font-size:0.72rem;color:var(--blue-color);">View All →</a>
+                </div>
+            </div>
+            <ul class="alert-log" id="mini-alert-list" style="flex:1;max-height:200px;">
+                <li class="alert-item"><span style="color:var(--text-muted);">System monitoring…</span></li>
+            </ul>
+        </div>
+
+        <!-- Guardian Pings -->
+        <div class="panel">
+            <div class="flex-between mb-2">
+                <h3 style="margin:0;font-size:0.9rem;">
+                    <i class="fa-solid fa-satellite-dish" style="color:var(--blue-color);font-size:0.85rem;"></i> Guardian Pings
+                </h3>
+                <span class="badge badge-safety" id="guardian-ping-count">0 sent</span>
+            </div>
+            <div class="ping-log" id="ping-log">
+                <div style="color:var(--text-muted);font-size:0.8rem;">Awaiting first ping…</div>
+            </div>
+            <a href="guardian.html" class="secondary-btn mt-2" style="font-size:0.8rem;text-decoration:none;">
+                <i class="fa-solid fa-users"></i> Manage Guardians
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+    <a href="index.html"    class="nav-item active"><i class="fa-solid fa-house"></i>Dashboard</a>
+    <a href="guardian.html" class="nav-item"><i class="fa-solid fa-satellite-dish"></i>Guardian</a>
+    <a href="sos.html"      class="nav-item sos-nav"><i class="fa-solid fa-shield-heart"></i></a>
+    <a href="report.html"   class="nav-item"><i class="fa-solid fa-map-pin"></i>Report</a>
+    <a href="contacts.html" class="nav-item"><i class="fa-solid fa-users"></i>Contacts</a>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
